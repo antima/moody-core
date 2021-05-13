@@ -1,8 +1,10 @@
 package device
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"time"
 )
 
 type Device interface {
@@ -13,11 +15,6 @@ type MoodyDevice struct {
 	isUp       bool
 	ipAddress  string
 	macAddress string
-}
-
-type Actuator struct {
-	MoodyDevice
-	state float64
 }
 
 type ConnectionPacket struct {
@@ -37,6 +34,8 @@ func (mDev *MoodyDevice) sync() bool {
 		return false
 	}
 
+	defer resp.Body.Close()
+
 	connPkt := ConnectionPacket{}
 	if err := json.NewDecoder(resp.Body).Decode(&connPkt); err != nil {
 		mDev.isUp = false
@@ -54,6 +53,55 @@ type Sensor struct {
 }
 
 func (s *Sensor) Read() float64 {
-	// if timeout elapses just return the last reading
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get(s.ipAddress + "/api/data")
+	if err != nil {
+		return s.lastReading
+	}
+
+	defer resp.Body.Close()
+
+	if err := json.NewDecoder(resp.Body).Decode(&s.lastReading); err != nil {
+		return s.lastReading
+	}
+
 	return s.lastReading
+
+}
+
+type Actuator struct {
+	MoodyDevice
+	state float64
+}
+
+func (a *Actuator) Actuate(action float64) {
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	actionPacket := DataPacket{}
+	actionBytes, err := json.Marshal(&actionPacket)
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequest("PUT", a.ipAddress+"/api/data", bytes.NewReader(actionBytes))
+	if err != nil {
+		return
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&actionPacket); err != nil {
+		return
+	}
+
+	a.state = actionPacket.Payload
 }
