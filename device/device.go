@@ -3,6 +3,7 @@ package device
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 )
@@ -34,7 +35,7 @@ func (mDev *MoodyDevice) sync() bool {
 		return false
 	}
 
-	defer resp.Body.Close()
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
 
 	connPkt := ConnectionPacket{}
 	if err := json.NewDecoder(resp.Body).Decode(&connPkt); err != nil {
@@ -62,7 +63,7 @@ func (s *Sensor) Read() float64 {
 		return s.lastReading
 	}
 
-	defer resp.Body.Close()
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
 
 	if err := json.NewDecoder(resp.Body).Decode(&s.lastReading); err != nil {
 		return s.lastReading
@@ -82,7 +83,9 @@ func (a *Actuator) Actuate(action float64) {
 		Timeout: 5 * time.Second,
 	}
 
-	actionPacket := DataPacket{}
+	actionPacket := DataPacket{
+		Payload: action,
+	}
 	actionBytes, err := json.Marshal(&actionPacket)
 	if err != nil {
 		return
@@ -98,7 +101,7 @@ func (a *Actuator) Actuate(action float64) {
 		return
 	}
 
-	defer resp.Body.Close()
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
 	if err := json.NewDecoder(resp.Body).Decode(&actionPacket); err != nil {
 		return
 	}
