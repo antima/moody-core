@@ -1,9 +1,7 @@
-package core
+package moody
 
 import (
 	"sync"
-
-	"github.com/antima/moody-core/device"
 )
 
 type DeviceEvent uint
@@ -18,14 +16,20 @@ type Observer interface {
 }
 
 type DeviceMsg struct {
-	Device device.Device
+	Device Device
 	Event  DeviceEvent
 }
 
 type DeviceList struct {
-	devices   map[string]device.Device
+	devices   map[string]Device
 	observers []chan<- DeviceMsg
 	mutex     sync.Mutex
+}
+
+func NewDeviceList() *DeviceList {
+	return &DeviceList{
+		devices: make(map[string]Device),
+	}
 }
 
 func (list *DeviceList) Attach(obsChan chan<- DeviceMsg) {
@@ -34,7 +38,7 @@ func (list *DeviceList) Attach(obsChan chan<- DeviceMsg) {
 	list.observers = append(list.observers, obsChan)
 }
 
-func (list *DeviceList) Add(ip string, device device.Device) {
+func (list *DeviceList) Add(ip string, device Device) {
 	list.mutex.Lock()
 	defer list.mutex.Unlock()
 	list.devices[ip] = device

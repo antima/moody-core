@@ -1,5 +1,7 @@
-package main
+package moody
 
-func main() {
-
+func StartCore() {
+	ssdpMonitorStart()
+	moodyApi()
+	ssdpStop()
 }
