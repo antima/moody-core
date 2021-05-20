@@ -21,9 +21,11 @@ type DeviceMsg struct {
 }
 
 type DeviceList struct {
-	devices   map[string]Device
-	observers []chan<- DeviceMsg
-	mutex     sync.Mutex
+	changed    bool
+	namesCache []string
+	devices    map[string]Device
+	observers  []chan<- DeviceMsg
+	mutex      sync.Mutex
 }
 
 func NewDeviceList() *DeviceList {
@@ -41,7 +43,13 @@ func (list *DeviceList) Attach(obsChan chan<- DeviceMsg) {
 func (list *DeviceList) Add(ip string, device Device) {
 	list.mutex.Lock()
 	defer list.mutex.Unlock()
+
+	if _, exists := list.devices[ip]; exists {
+		return
+	}
+
 	list.devices[ip] = device
+	list.namesCache = append(list.namesCache, ip)
 
 	devMsg := DeviceMsg{
 		Device: device,
@@ -55,6 +63,7 @@ func (list *DeviceList) Add(ip string, device Device) {
 func (list *DeviceList) Remove(ip string) {
 	list.mutex.Lock()
 	defer list.mutex.Unlock()
+
 	dev, exists := list.devices[ip]
 	if !exists {
 		return
@@ -66,7 +75,18 @@ func (list *DeviceList) Remove(ip string) {
 	}
 
 	delete(list.devices, ip)
+	list.changed = true
 	for _, observer := range list.observers {
 		observer <- devMsg
 	}
+}
+
+func (list *DeviceList) ConnectedIPs() []string {
+	if list.changed {
+		list.namesCache = list.namesCache[:0]
+		for ip, _ := range list.devices {
+			list.namesCache = append(list.namesCache, ip)
+		}
+	}
+	return list.namesCache
 }

@@ -26,14 +26,16 @@ type Device interface {
 	sync() bool
 }
 
-type MoodyDevice struct {
+// A Node is a generic remote device in the WSAN that implements the basic moody protocol
+// exposing tha /api/conn endpoint
+type Node struct {
 	isUp       bool
 	ipAddress  string
 	macAddress string
 	service    string
 }
 
-func (mDev *MoodyDevice) sync() bool {
+func (mDev *Node) sync() bool {
 	resp, err := http.Get(mDev.ipAddress)
 	if err != nil {
 		mDev.isUp = false
@@ -66,7 +68,7 @@ func NewDevice(ip string) (Device, error) {
 		return nil, err
 	}
 
-	baseDev := MoodyDevice{
+	baseDev := Node{
 		isUp:       true,
 		ipAddress:  ip,
 		macAddress: connPkt.MacAddress,
@@ -76,24 +78,27 @@ func NewDevice(ip string) (Device, error) {
 	switch connPkt.DeviceType {
 	case "sensor":
 		return &Sensor{
-			MoodyDevice: baseDev,
+			Node:        baseDev,
 			lastReading: 0,
 		}, nil
 	case "actuator":
 		return &Actuator{
-			MoodyDevice: baseDev,
-			state:       0,
+			Node:  baseDev,
+			state: 0,
 		}, nil
 	default:
 		return nil, errors.New("unsupported node type")
 	}
 }
 
+// A Sensor is a particular type of Node that can be queried for sensed data
 type Sensor struct {
-	MoodyDevice
+	Node
 	lastReading float64
 }
 
+// Read attempts to get a new reading from the remote Sensor and either returns the new
+// data if the Sensor responds, or returns the last successful reading
 func (s *Sensor) Read() float64 {
 	client := http.Client{
 		Timeout: 5 * time.Second,
@@ -115,7 +120,7 @@ func (s *Sensor) Read() float64 {
 }
 
 type Actuator struct {
-	MoodyDevice
+	Node
 	state float64
 }
 

@@ -9,7 +9,7 @@ import (
 )
 
 type DevicesResp struct {
-	Devices map[string]Device `json:"devices"`
+	Devices []string `json:"devices"`
 }
 
 func moodyApi() {
@@ -22,7 +22,7 @@ func moodyApi() {
 func getDevices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 
-	devs := DevicesResp{Devices: Devices.devices}
+	devs := DevicesResp{Devices: Devices.ConnectedIPs()}
 	if err := json.NewEncoder(w).Encode(devs); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
