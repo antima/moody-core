@@ -81,7 +81,18 @@ func (list *DeviceList) Remove(ip string) {
 	}
 }
 
+func (list *DeviceList) Get(ip string) (Device, bool) {
+	list.mutex.Lock()
+	defer list.mutex.Unlock()
+
+	dev, exists := list.devices[ip]
+	return dev, exists
+}
+
 func (list *DeviceList) ConnectedIPs() []string {
+	list.mutex.Lock()
+	defer list.mutex.Unlock()
+
 	if list.changed {
 		list.namesCache = list.namesCache[:0]
 		for ip, _ := range list.devices {

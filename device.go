@@ -5,9 +5,42 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
+
+var (
+	NodeConnectionError  = errors.New("could not establish a connection with the device")
+	UnsupportedNodeError = errors.New("unsupported node type")
+	InvalidIPError       = errors.New("invalid IP")
+)
+
+type Endpoint string
+
+const (
+	ConnectionEndpoint Endpoint = "/api/conn"
+	DataEndpoint       Endpoint = "/api/data"
+)
+
+func getEndpointData(ip string, remote Endpoint, dest interface{}) bool {
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	// select protocol maybe
+	resp, err := client.Get("http://" + ip + string(remote))
+	if err != nil {
+		return false
+	}
+
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
+
+	if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
+		return false
+	}
+	return true
+}
 
 // A ConnectionPacket represents a packet returned by a conn node endpoint
 type ConnectionPacket struct {
@@ -23,7 +56,7 @@ type DataPacket struct {
 
 // A Device is a virtualization of a remote machine that can be synced
 type Device interface {
-	sync() bool
+	Sync() bool
 }
 
 // A Node is a generic remote device in the WSAN that implements the basic moody protocol
@@ -35,37 +68,17 @@ type Node struct {
 	service    string
 }
 
-func (mDev *Node) sync() bool {
-	resp, err := http.Get(mDev.ipAddress)
-	if err != nil {
-		mDev.isUp = false
-		return false
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
-
-	connPkt := ConnectionPacket{}
-	if err := json.NewDecoder(resp.Body).Decode(&connPkt); err != nil {
-		mDev.isUp = false
-		return false
-	}
-
-	mDev.isUp = true
-	return true
-}
-
 // NewDevice initializes a device for the first time from an ip string, returning an error
 // if the ip is unreachable, returns a badly formatted response or an unrecognized node type.
 func NewDevice(ip string) (Device, error) {
-	resp, err := http.Get("http://" + ip + "/api/conn")
-	if err != nil {
-		return nil, err
+	if ipOk := net.ParseIP(ip); ipOk == nil {
+		return nil, InvalidIPError
 	}
 
-	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
 	connPkt := ConnectionPacket{}
-	if err := json.NewDecoder(resp.Body).Decode(&connPkt); err != nil {
-		return nil, err
+	res := getEndpointData(ip, ConnectionEndpoint, connPkt)
+	if !res {
+		return nil, NodeConnectionError
 	}
 
 	baseDev := Node{
@@ -87,7 +100,7 @@ func NewDevice(ip string) (Device, error) {
 			state: 0,
 		}, nil
 	default:
-		return nil, errors.New("unsupported node type")
+		return nil, UnsupportedNodeError
 	}
 }
 
@@ -97,60 +110,66 @@ type Sensor struct {
 	lastReading float64
 }
 
-// Read attempts to get a new reading from the remote Sensor and either returns the new
-// data if the Sensor responds, or returns the last successful reading
 func (s *Sensor) Read() float64 {
-	client := http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	resp, err := client.Get(s.ipAddress + "/api/data")
-	if err != nil {
-		return s.lastReading
-	}
-
-	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
-
-	if err := json.NewDecoder(resp.Body).Decode(&s.lastReading); err != nil {
-		return s.lastReading
-	}
-
+	s.Sync()
 	return s.lastReading
-
 }
 
+// Sync attempts to get a new reading from the remote Sensor and either returns the new
+// data if the Sensor responds, or returns the last successful reading
+func (s *Sensor) Sync() bool {
+	dataPkt := DataPacket{}
+	res := getEndpointData(s.ipAddress, DataEndpoint, &dataPkt)
+	if res {
+		s.lastReading = dataPkt.Payload
+	}
+	s.isUp = res
+	return res
+}
+
+// An Actuator describes a node that is using the Moody Actuator object as its
+// fw on a remote device
 type Actuator struct {
 	Node
-	state float64
+	stateSynced bool
+	state       float64
 }
 
-func (a *Actuator) Actuate(action float64) {
+func (a *Actuator) SetState(state float64) {
+	if state != a.state {
+		a.state = state
+		a.Sync()
+	}
+}
+
+func (a *Actuator) Sync() bool {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
 
 	actionPacket := DataPacket{
-		Payload: action,
+		Payload: a.state,
 	}
 	actionBytes, err := json.Marshal(&actionPacket)
 	if err != nil {
-		return
+		return false
 	}
 
 	req, err := http.NewRequest("PUT", a.ipAddress+"/api/data", bytes.NewReader(actionBytes))
 	if err != nil {
-		return
+		return false
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return
+		return false
 	}
 
 	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
 	if err := json.NewDecoder(resp.Body).Decode(&actionPacket); err != nil {
-		return
+		return false
 	}
 
 	a.state = actionPacket.Payload
+	return true
 }

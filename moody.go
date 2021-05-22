@@ -1,7 +1,7 @@
 package moody
 
-func StartCore() {
+func StartCore(port string) {
 	ssdpMonitorStart()
-	moodyApi()
+	moodyApi(port)
 	ssdpStop()
 }
