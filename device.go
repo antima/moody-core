@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"time"
 )
@@ -13,7 +12,6 @@ import (
 var (
 	NodeConnectionError  = errors.New("could not establish a connection with the device")
 	UnsupportedNodeError = errors.New("unsupported node type")
-	InvalidIPError       = errors.New("invalid IP")
 )
 
 type Endpoint string
@@ -27,7 +25,6 @@ func getEndpointData(ip string, remote Endpoint, dest interface{}) bool {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
-
 	// select protocol maybe
 	resp, err := client.Get("http://" + ip + string(remote))
 	if err != nil {
@@ -71,12 +68,8 @@ type Node struct {
 // NewDevice initializes a device for the first time from an ip string, returning an error
 // if the ip is unreachable, returns a badly formatted response or an unrecognized node type.
 func NewDevice(ip string) (Device, error) {
-	if ipOk := net.ParseIP(ip); ipOk == nil {
-		return nil, InvalidIPError
-	}
-
 	connPkt := ConnectionPacket{}
-	res := getEndpointData(ip, ConnectionEndpoint, connPkt)
+	res := getEndpointData(ip, ConnectionEndpoint, &connPkt)
 	if !res {
 		return nil, NodeConnectionError
 	}

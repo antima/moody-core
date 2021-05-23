@@ -2,34 +2,16 @@ package moody
 
 import (
 	"encoding/json"
-	"fmt"
+	"io"
 	"math/rand"
-	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/gorilla/mux"
 )
 
-func randomString(length uint) string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	randB := make([]byte, length)
-	for idx := range randB {
-		randB[idx] = letters[rand.Intn(len(letters))]
-	}
-	return string(randB)
-}
-
-func openPort() string {
-	mockSocket, _ := net.Listen("tcp", ":0")
-	port := fmt.Sprintf(":%s", strings.Split(mockSocket.Addr().String(), "]:")[1])
-	_ = mockSocket.Close()
-	return port
-}
-
-func mockOkConn(port *string) {
-	router := mux.NewRouter()
+func mockOkConn() *httptest.Server {
+	router := http.NewServeMux()
 	router.HandleFunc("/api/conn", func(w http.ResponseWriter, r *http.Request) {
 		conn := ConnectionPacket{
 			DeviceType: "sensor",
@@ -39,29 +21,11 @@ func mockOkConn(port *string) {
 		_ = json.NewEncoder(w).Encode(&conn)
 	})
 
-	*port = openPort()
-	_ = http.ListenAndServe(*port, router)
+	return httptest.NewServer(router)
 }
 
-func mockWrongFormatConn(port *string) {
-	router := mux.NewRouter()
-	router.HandleFunc("/api/conn", func(w http.ResponseWriter, r *http.Request) {
-		conn := struct {
-			DeviceType string `json:"type"`
-			Service    string `json:"service"`
-		}{
-			DeviceType: "sensor",
-			Service:    "example",
-		}
-		_ = json.NewEncoder(w).Encode(&conn)
-	})
-
-	*port = openPort()
-	_ = http.ListenAndServe(*port, router)
-}
-
-func mockWrongDeviceTypeConn(port *string) {
-	router := mux.NewRouter()
+func mockWrongDeviceTypeConn() *httptest.Server {
+	router := http.NewServeMux()
 	router.HandleFunc("/api/conn", func(w http.ResponseWriter, r *http.Request) {
 		conn := ConnectionPacket{
 			DeviceType: "notok",
@@ -71,8 +35,48 @@ func mockWrongDeviceTypeConn(port *string) {
 		_ = json.NewEncoder(w).Encode(&conn)
 	})
 
-	*port = openPort()
-	_ = http.ListenAndServe(*port, router)
+	return httptest.NewServer(router)
+}
+
+func mockSensor() *httptest.Server {
+	router := http.NewServeMux()
+	router.HandleFunc("/api/conn", func(w http.ResponseWriter, r *http.Request) {
+		conn := ConnectionPacket{
+			DeviceType: "sensor",
+			MacAddress: "aa:aa:aa:aa:aa:aa",
+			Service:    "example",
+		}
+		_ = json.NewEncoder(w).Encode(&conn)
+	})
+
+	router.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
+		n := rand.Float64()*1000 + 10
+		data := DataPacket{Payload: n}
+		_ = json.NewEncoder(w).Encode(&data)
+	})
+
+	return httptest.NewServer(router)
+}
+
+func mockActuator() *httptest.Server {
+	router := http.NewServeMux()
+	router.HandleFunc("/api/conn", func(w http.ResponseWriter, r *http.Request) {
+		conn := ConnectionPacket{
+			DeviceType: "actuator",
+			MacAddress: "aa:aa:aa:aa:aa:aa",
+			Service:    "example",
+		}
+		_ = json.NewEncoder(w).Encode(&conn)
+	})
+
+	router.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
+		data := DataPacket{}
+		_ = json.NewDecoder(r.Body).Decode(&data)
+		defer func(body io.ReadCloser) { _ = body.Close() }(r.Body)
+		_ = json.NewEncoder(w).Encode(&data)
+	})
+
+	return httptest.NewServer(router)
 }
 
 func nillableErrorString(err error) string {
@@ -83,32 +87,59 @@ func nillableErrorString(err error) string {
 }
 
 func TestNewDevice(t *testing.T) {
-	var okPort string
-	var okWrongFmtPort string
-	var okWrongTypePort string
-
-	go mockOkConn(&okPort)
-	go mockWrongFormatConn(&okWrongFmtPort)
-	go mockWrongDeviceTypeConn(&okWrongTypePort)
-
-	for okPort == "" || okWrongFmtPort == "" || okWrongTypePort == "" {
-	}
-
 	testCases := []struct {
-		Ip       string
-		Expected error
+		Ip         string
+		ServerFunc func() *httptest.Server
+		Expected   error
 	}{
-		{randomString(10), InvalidIPError},
-		{"192.168.1.1", NodeConnectionError},
-		{"192.168.1.1" + okWrongFmtPort, NodeConnectionError},
-		{"192.168.1.1" + okWrongTypePort, UnsupportedNodeError},
-		{"192.168.1.1" + okPort, nil},
+		//{randomString(10), nil, InvalidIPError},
+		{"192.168.1.1", nil, NodeConnectionError},
+		{"", mockWrongDeviceTypeConn, UnsupportedNodeError},
+		{"", mockOkConn, nil},
 	}
 
 	for _, test := range testCases {
-		_, err := NewDevice(test.Ip)
+		var ip string
+		var server *httptest.Server
+		var err error
+
+		if test.ServerFunc != nil {
+			server = test.ServerFunc()
+			ip = server.URL
+			ipStart := strings.Index(ip, "://") + 3
+			ip = ip[ipStart:]
+		} else {
+			_, err = NewDevice(test.Ip)
+			ip = test.Ip
+		}
+
+		_, err = NewDevice(ip)
+
 		if err != test.Expected {
 			t.Errorf("got %s, expected %s", nillableErrorString(err), nillableErrorString(test.Expected))
 		}
+
+		if server != nil {
+			server.Close()
+		}
+	}
+}
+
+func TestSensor_Read(t *testing.T) {
+	server := mockSensor()
+	ipStart := strings.Index(server.URL, "://") + 3
+	ip := server.URL[ipStart:]
+
+	dev, _ := NewDevice(ip)
+	sensor := dev.(*Sensor)
+	val := sensor.Read()
+	if val == 0 {
+		t.Errorf("got 0, expected val != 0")
+	}
+
+	server.Close()
+	newVal := sensor.Read()
+	if newVal != val {
+		t.Errorf("got %f, expected %f", newVal, val)
 	}
 }
