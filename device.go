@@ -53,7 +53,7 @@ type DataPacket struct {
 
 // A Device is a virtualization of a remote machine that can be synced
 type Device interface {
-	Sync() bool
+	sync() bool
 }
 
 // A Node is a generic remote device in the WSAN that implements the basic moody protocol
@@ -63,6 +63,21 @@ type Node struct {
 	ipAddress  string
 	macAddress string
 	service    string
+}
+
+// IP returns the IP address of the remote Node
+func (n Node) IP() string {
+	return n.ipAddress
+}
+
+// MacAddress returns the mac address of the remote Node
+func (n Node) MacAddress() string {
+	return n.macAddress
+}
+
+// Service returns the service implemented by the remote node
+func (n Node) Service() string {
+	return n.service
 }
 
 // NewDevice initializes a device for the first time from an ip string, returning an error
@@ -89,8 +104,10 @@ func NewDevice(ip string) (Device, error) {
 		}, nil
 	case "actuator":
 		return &Actuator{
-			Node:  baseDev,
-			state: 0,
+			Node:        baseDev,
+			syncChan:    make(chan bool),
+			stateSynced: true,
+			state:       0,
 		}, nil
 	default:
 		return nil, UnsupportedNodeError
@@ -104,13 +121,13 @@ type Sensor struct {
 }
 
 func (s *Sensor) Read() float64 {
-	s.Sync()
+	s.sync()
 	return s.lastReading
 }
 
-// Sync attempts to get a new reading from the remote Sensor and either returns the new
+// sync attempts to get a new reading from the remote Sensor and either returns the new
 // data if the Sensor responds, or returns the last successful reading
-func (s *Sensor) Sync() bool {
+func (s *Sensor) sync() bool {
 	dataPkt := DataPacket{}
 	res := getEndpointData(s.ipAddress, DataEndpoint, &dataPkt)
 	if res {
@@ -124,18 +141,52 @@ func (s *Sensor) Sync() bool {
 // fw on a remote device
 type Actuator struct {
 	Node
+	syncChan    chan bool
 	stateSynced bool
 	state       float64
 }
 
-func (a *Actuator) SetState(state float64) {
-	if state != a.state {
-		a.state = state
-		a.Sync()
-	}
+func (a *Actuator) State() float64 {
+	return a.state
 }
 
-func (a *Actuator) Sync() bool {
+func (a *Actuator) StopSync() {
+	a.syncChan <- true
+}
+
+func (a *Actuator) Actuate(state float64) {
+	if state == a.state {
+		return
+	}
+
+	a.state = state
+	outcome := a.sync()
+	if outcome {
+		if !a.stateSynced {
+			a.syncChan <- true
+			a.stateSynced = true
+		}
+		return
+	}
+
+	a.stateSynced = false
+	go func(act *Actuator) {
+		for {
+			select {
+			case <-time.After(10 * time.Second):
+				synced := act.sync()
+				if synced {
+					a.stateSynced = true
+					return
+				}
+			case <-a.syncChan:
+				return
+			}
+		}
+	}(a)
+}
+
+func (a *Actuator) sync() bool {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -148,7 +199,7 @@ func (a *Actuator) Sync() bool {
 		return false
 	}
 
-	req, err := http.NewRequest("PUT", a.ipAddress+"/api/data", bytes.NewReader(actionBytes))
+	req, err := http.NewRequest("PUT", a.ipAddress+string(DataEndpoint), bytes.NewReader(actionBytes))
 	if err != nil {
 		return false
 	}

@@ -143,3 +143,19 @@ func TestSensor_Read(t *testing.T) {
 		t.Errorf("got %f, expected %f", newVal, val)
 	}
 }
+
+func TestActuator_SetState(t *testing.T) {
+	server := mockActuator()
+	ipStart := strings.Index(server.URL, "://") + 3
+	ip := server.URL[ipStart:]
+
+	dev, _ := NewDevice(ip)
+	actuator := dev.(*Actuator)
+	val := 1500.0
+	actuator.Actuate(val)
+
+	if actuator.State() != val {
+		t.Errorf("expected %f, got %f", val, actuator.State())
+	}
+
+}
