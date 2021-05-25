@@ -30,7 +30,8 @@ type DeviceList struct {
 
 func NewDeviceList() *DeviceList {
 	return &DeviceList{
-		devices: make(map[string]Device),
+		devices:    make(map[string]Device),
+		namesCache: []string{},
 	}
 }
 
@@ -95,7 +96,7 @@ func (list *DeviceList) ConnectedIPs() []string {
 
 	if list.changed {
 		list.namesCache = list.namesCache[:0]
-		for ip, _ := range list.devices {
+		for ip := range list.devices {
 			list.namesCache = append(list.namesCache, ip)
 		}
 	}

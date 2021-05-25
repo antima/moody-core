@@ -29,7 +29,7 @@ func TestDeviceList_Attach(t *testing.T) {
 func TestDeviceList_Add(t *testing.T) {
 	ip := "127.0.0.1"
 	dev := &Sensor{Node: Node{
-		ipAddress: ip,
+		IpAddress: ip,
 	}}
 	obsChan := make(chan DeviceMsg, 1)
 	list := NewDeviceList()
@@ -42,7 +42,7 @@ func TestDeviceList_Add(t *testing.T) {
 	go func(device *Sensor, devices map[string]Device, wg *sync.WaitGroup) {
 		defer wg.Done()
 		for ipAddr := range devices {
-			if ipAddr == device.IP() {
+			if ipAddr == device.IpAddress {
 				return
 			}
 		}
@@ -52,7 +52,7 @@ func TestDeviceList_Add(t *testing.T) {
 	go func(device *Sensor, ips []string, wg *sync.WaitGroup) {
 		defer wg.Done()
 		for _, ipAddr := range ips {
-			if ipAddr == device.IP() {
+			if ipAddr == device.IpAddress {
 				return
 			}
 		}

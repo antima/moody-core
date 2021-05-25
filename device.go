@@ -23,7 +23,7 @@ const (
 
 func getEndpointData(ip string, remote Endpoint, dest interface{}) bool {
 	client := http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 1 * time.Second,
 	}
 	// select protocol maybe
 	resp, err := client.Get("http://" + ip + string(remote))
@@ -43,7 +43,7 @@ func getEndpointData(ip string, remote Endpoint, dest interface{}) bool {
 type ConnectionPacket struct {
 	DeviceType string `json:"type"`
 	MacAddress string `json:"mac"`
-	Service    string `json:"service"`
+	Service    string `json:"Service"`
 }
 
 // A DataPacket represents a packet returned by a data node endpoint
@@ -60,24 +60,9 @@ type Device interface {
 // exposing tha /api/conn endpoint
 type Node struct {
 	isUp       bool
-	ipAddress  string
-	macAddress string
-	service    string
-}
-
-// IP returns the IP address of the remote Node
-func (n Node) IP() string {
-	return n.ipAddress
-}
-
-// MacAddress returns the mac address of the remote Node
-func (n Node) MacAddress() string {
-	return n.macAddress
-}
-
-// Service returns the service implemented by the remote node
-func (n Node) Service() string {
-	return n.service
+	IpAddress  string `json:"ip"`
+	MacAddress string `json:"mac"`
+	Service    string `json:"service"`
 }
 
 // NewDevice initializes a device for the first time from an ip string, returning an error
@@ -91,9 +76,9 @@ func NewDevice(ip string) (Device, error) {
 
 	baseDev := Node{
 		isUp:       true,
-		ipAddress:  ip,
-		macAddress: connPkt.MacAddress,
-		service:    connPkt.Service,
+		IpAddress:  ip,
+		MacAddress: connPkt.MacAddress,
+		Service:    connPkt.Service,
 	}
 
 	switch connPkt.DeviceType {
@@ -129,7 +114,7 @@ func (s *Sensor) Read() float64 {
 // data if the Sensor responds, or returns the last successful reading
 func (s *Sensor) sync() bool {
 	dataPkt := DataPacket{}
-	res := getEndpointData(s.ipAddress, DataEndpoint, &dataPkt)
+	res := getEndpointData(s.IpAddress, DataEndpoint, &dataPkt)
 	if res {
 		s.lastReading = dataPkt.Payload
 	}
@@ -191,29 +176,28 @@ func (a *Actuator) sync() bool {
 		Timeout: 5 * time.Second,
 	}
 
-	actionPacket := DataPacket{
-		Payload: a.state,
-	}
+	actionPacket := DataPacket{Payload: a.state}
 	actionBytes, err := json.Marshal(&actionPacket)
 	if err != nil {
 		return false
 	}
 
-	req, err := http.NewRequest("PUT", a.ipAddress+string(DataEndpoint), bytes.NewReader(actionBytes))
+	req, err := http.NewRequest("PUT", "http://"+a.IpAddress+string(DataEndpoint), bytes.NewReader(actionBytes))
 	if err != nil {
 		return false
 	}
 
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
 
+	actuateResp := DataPacket{}
 	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
-	if err := json.NewDecoder(resp.Body).Decode(&actionPacket); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&actuateResp); err != nil {
 		return false
 	}
 
-	a.state = actionPacket.Payload
 	return true
 }
