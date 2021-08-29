@@ -1,7 +1,7 @@
-package moody
+package moody_core
 
 func StartCore(port string) {
 	ssdpMonitorStart()
-	moodyApi(port)
+	api.moodyApi(port)
 	ssdpStop()
 }

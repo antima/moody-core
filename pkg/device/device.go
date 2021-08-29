@@ -1,4 +1,4 @@
-package moody
+package device
 
 import (
 	"bytes"

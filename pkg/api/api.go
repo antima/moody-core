@@ -1,11 +1,19 @@
-package moody
+package api
 
 import (
 	"encoding/json"
 	"log"
 	"net/http"
 
+	"github.com/antima/moody-core/pkg/device"
+
+	"github.com/antima/moody-core"
+
 	"github.com/gorilla/mux"
+)
+
+var (
+	devices *device.DeviceList
 )
 
 type DevicesResp struct {
@@ -13,11 +21,14 @@ type DevicesResp struct {
 }
 
 type DeviceResp struct {
-	Node
+	device.Node
 	Type string `json:"type"`
 }
 
-func moodyApi(port string) {
+func moodyApi(deviceList *device.DeviceList, port string) {
+	if deviceList == nil {
+		panic("Device list can't be nil")
+	}
 	router := mux.NewRouter()
 	router.HandleFunc("/api/device", getDevices).Methods("GET")
 	router.HandleFunc("/api/device/{url}", getDevice).Methods("GET")
@@ -29,7 +40,7 @@ func moodyApi(port string) {
 
 func getDevices(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-type", "application/json")
-	devs := DevicesResp{Devices: Devices.ConnectedIPs()}
+	devs := DevicesResp{Devices: devices.ConnectedIPs()}
 	if err := json.NewEncoder(w).Encode(devs); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -38,7 +49,7 @@ func getDevices(w http.ResponseWriter, _ *http.Request) {
 func getDevice(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := Devices.Get(vars["url"])
+	dev, exists := moody.Devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -46,11 +57,11 @@ func getDevice(w http.ResponseWriter, r *http.Request) {
 
 	var devResp DeviceResp
 	switch dev.(type) {
-	case *Sensor:
-		devResp = DeviceResp{Node: dev.(*Sensor).Node}
+	case *device.Sensor:
+		devResp = DeviceResp{Node: dev.(*device.Sensor).Node}
 		devResp.Type = "sensor"
-	case *Actuator:
-		devResp = DeviceResp{Node: dev.(*Actuator).Node}
+	case *device.Actuator:
+		devResp = DeviceResp{Node: dev.(*device.Actuator).Node}
 		devResp.Type = "actuator"
 	default:
 		break
@@ -64,20 +75,20 @@ func getDevice(w http.ResponseWriter, r *http.Request) {
 func getSensorData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := Devices.Get(vars["url"])
+	dev, exists := moody.Devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	sensor, isSensor := dev.(*Sensor)
+	sensor, isSensor := dev.(*device.Sensor)
 	if !isSensor {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	data := sensor.Read()
-	dataResp := DataPacket{Payload: data}
+	dataResp := device.DataPacket{Payload: data}
 	if err := json.NewEncoder(w).Encode(&dataResp); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -86,19 +97,19 @@ func getSensorData(w http.ResponseWriter, r *http.Request) {
 func getActuatorData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := Devices.Get(vars["url"])
+	dev, exists := moody.Devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	actuator, isActuator := dev.(*Actuator)
+	actuator, isActuator := dev.(*device.Actuator)
 	if !isActuator {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	state := actuator.State()
-	dataResp := DataPacket{Payload: state}
+	dataResp := device.DataPacket{Payload: state}
 	if err := json.NewEncoder(w).Encode(&dataResp); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -107,13 +118,13 @@ func getActuatorData(w http.ResponseWriter, r *http.Request) {
 func putActuatorData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := Devices.Get(vars["url"])
+	dev, exists := moody.Devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	data := DataPacket{}
+	data := device.DataPacket{}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&data); err != nil {
@@ -121,7 +132,7 @@ func putActuatorData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actuator, isActuator := dev.(*Actuator)
+	actuator, isActuator := dev.(*device.Actuator)
 	if !isActuator {
 		w.WriteHeader(http.StatusNotFound)
 		return

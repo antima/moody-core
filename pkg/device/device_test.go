@@ -1,4 +1,4 @@
-package moody
+package device
 
 import (
 	"encoding/json"
@@ -92,7 +92,6 @@ func TestNewDevice(t *testing.T) {
 		ServerFunc func() *httptest.Server
 		Expected   error
 	}{
-		//{randomString(10), nil, InvalidIPError},
 		{"192.168.1.1", nil, NodeConnectionError},
 		{"", mockWrongDeviceTypeConn, UnsupportedNodeError},
 		{"", mockOkConn, nil},
