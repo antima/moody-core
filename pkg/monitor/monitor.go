@@ -5,19 +5,19 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/antima/moody-core/pkg/device"
+	"github.com/antima/moody-core/pkg/model"
 
 	"github.com/koron/go-ssdp"
 )
 
 type SsdpMonitor struct {
-	DeviceList     *device.DeviceList
+	DeviceList     *model.DeviceList
 	notSyncedMutex sync.Mutex
 	NotSynced      []string
 	monitor        *ssdp.Monitor
 }
 
-func NewMonitor(list *device.DeviceList) *SsdpMonitor {
+func NewMonitor(list *model.DeviceList) *SsdpMonitor {
 	monitor := &SsdpMonitor{
 		DeviceList: list,
 		monitor:    &ssdp.Monitor{},
@@ -30,7 +30,7 @@ func NewMonitor(list *device.DeviceList) *SsdpMonitor {
 		server := m.Server
 
 		if strings.Contains(server, "Arduino") {
-			dev, err := device.NewDevice(ip)
+			dev, err := model.NewDevice(ip)
 			if err != nil {
 				monitor.notSyncedMutex.Lock()
 				defer monitor.notSyncedMutex.Unlock()
