@@ -1,4 +1,4 @@
-package device
+package model
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	NodeConnectionError  = errors.New("could not establish a connection with the device")
+	NodeConnectionError  = errors.New("could not establish a connection with the model")
 	UnsupportedNodeError = errors.New("unsupported node type")
 )
 
@@ -56,7 +56,7 @@ type Device interface {
 	sync() bool
 }
 
-// A Node is a generic remote device in the WSAN that implements the basic moody protocol
+// A Node is a generic remote model in the WSAN that implements the basic moody protocol
 // exposing tha /api/conn endpoint
 type Node struct {
 	isUp       bool
@@ -65,7 +65,7 @@ type Node struct {
 	Service    string `json:"service"`
 }
 
-// NewDevice initializes a device for the first time from an ip string, returning an error
+// NewDevice initializes a model for the first time from an ip string, returning an error
 // if the ip is unreachable, returns a badly formatted response or an unrecognized node type.
 func NewDevice(ip string) (Device, error) {
 	connPkt := ConnectionPacket{}
@@ -123,7 +123,7 @@ func (s *Sensor) sync() bool {
 }
 
 // An Actuator describes a node that is using the Moody Actuator object as its
-// fw on a remote device
+// fw on a remote model
 type Actuator struct {
 	Node
 	syncChan    chan bool

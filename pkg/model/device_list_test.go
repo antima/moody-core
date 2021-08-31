@@ -1,4 +1,4 @@
-package device
+package model
 
 import (
 	"sync"
@@ -9,7 +9,7 @@ import (
 func TestNewDeviceList(t *testing.T) {
 	list := NewDeviceList()
 	if list == nil || list.devices == nil {
-		t.Errorf("got nil device list")
+		t.Errorf("got nil model list")
 	}
 }
 
@@ -23,7 +23,7 @@ func TestDeviceList_Attach(t *testing.T) {
 			return
 		}
 	}
-	t.Errorf("expected chan into device list observers, got not found")
+	t.Errorf("expected chan into model list observers, got not found")
 }
 
 func TestDeviceList_Add(t *testing.T) {
@@ -46,7 +46,7 @@ func TestDeviceList_Add(t *testing.T) {
 				return
 			}
 		}
-		t.Errorf("expected ip into device list, got not found")
+		t.Errorf("expected ip into model list, got not found")
 	}(dev, list.devices, &wg)
 
 	go func(device *Sensor, ips []string, wg *sync.WaitGroup) {
@@ -56,14 +56,14 @@ func TestDeviceList_Add(t *testing.T) {
 				return
 			}
 		}
-		t.Errorf("expected ip into device list cache, got not found")
+		t.Errorf("expected ip into model list cache, got not found")
 	}(dev, list.namesCache, &wg)
 
 	go func(ch chan DeviceMsg, wg *sync.WaitGroup) {
 		defer wg.Done()
 		select {
 		case <-time.After(2 * time.Second):
-			t.Errorf("expected device message, got nothing")
+			t.Errorf("expected model message, got nothing")
 		case <-obsChan:
 		}
 	}(obsChan, &wg)
