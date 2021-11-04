@@ -9,22 +9,25 @@ import (
 // load at startup via conf in future
 const serviceFolder = "~/moody-services"
 
-
 type InitFunc func() error
 type ActuateFunc func() error
 
 type MoodyService interface {
 	Name() string
+	ServiceName() string
 	Version() string
 	Init() error
 	Actuate() error
 }
 
 type PluginService struct {
-	name string
-	version string
-	init InitFunc
-	actuate ActuateFunc
+	// TODO eventChan chan
+
+	name        string
+	serviceName string
+	version     string
+	init        InitFunc
+	actuate     ActuateFunc
 }
 
 func NewPluginService(filename string) (*PluginService, error) {
@@ -54,10 +57,11 @@ func NewPluginService(filename string) (*PluginService, error) {
 	}
 
 	return &PluginService{
-		name: *name.(*string),
-		version: *version.(*string),
-		init: init.(InitFunc),
-		actuate: actuate.(ActuateFunc),
+		name:        filename,
+		serviceName: *name.(*string),
+		version:     *version.(*string),
+		init:        init.(InitFunc),
+		actuate:     actuate.(ActuateFunc),
 	}, nil
 }
 
@@ -77,6 +81,12 @@ func (service *PluginService) Actuate() error {
 	return service.actuate()
 }
 
+func ListenForUpdates() {
+	for {
+
+	}
+}
+
 func GetAllServices(serviceDir string) ([]string, error) {
 	var services []string
 	err := filepath.WalkDir(serviceDir, func(path string, d fs.DirEntry, err error) error {
@@ -85,7 +95,7 @@ func GetAllServices(serviceDir string) ([]string, error) {
 		}
 
 		if !d.IsDir() && filepath.Ext(d.Name()) == ".so" {
-			services= append(services, d.Name())
+			services = append(services, d.Name())
 		}
 		return nil
 	})
@@ -96,4 +106,3 @@ func GetAllServices(serviceDir string) ([]string, error) {
 
 	return services, nil
 }
-
