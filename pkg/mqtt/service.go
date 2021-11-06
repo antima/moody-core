@@ -1,4 +1,4 @@
-package services
+package mqtt
 
 import (
 	"io/fs"
@@ -6,26 +6,24 @@ import (
 	"plugin"
 )
 
-// load at startup via conf in future
-const serviceFolder = "~/moody-services"
-
 type InitFunc func() error
-type ActuateFunc func() error
+type ActuateFunc func(tuple StateTuple) error
 
 type MoodyService interface {
 	Name() string
 	ServiceName() string
 	Version() string
 	Init() error
-	Actuate() error
+	Actuate(PublishFunc) error
 }
 
 type PluginService struct {
-	// TODO eventChan chan
+	dataChan <-chan StateTuple
 
 	name        string
 	serviceName string
 	version     string
+	topics      []string
 	init        InitFunc
 	actuate     ActuateFunc
 }
@@ -46,6 +44,11 @@ func NewPluginService(filename string) (*PluginService, error) {
 		return nil, err
 	}
 
+	topics, err := pluginService.Lookup("Topics")
+	if err != nil {
+		return nil, err
+	}
+
 	init, err := pluginService.Lookup("Init")
 	if err != nil {
 		return nil, err
@@ -60,6 +63,7 @@ func NewPluginService(filename string) (*PluginService, error) {
 		name:        filename,
 		serviceName: *name.(*string),
 		version:     *version.(*string),
+		topics:      *topics.(*[]string),
 		init:        init.(InitFunc),
 		actuate:     actuate.(ActuateFunc),
 	}, nil
@@ -73,17 +77,9 @@ func (service *PluginService) Version() string {
 	return service.version
 }
 
-func (service *PluginService) Init() error {
-	return service.init()
-}
-
-func (service *PluginService) Actuate() error {
-	return service.actuate()
-}
-
-func ListenForUpdates() {
-	for {
-
+func (service *PluginService) ListenForUpdates() {
+	for data := range service.dataChan {
+		service.actuate(data)
 	}
 }
 
@@ -105,4 +101,10 @@ func GetAllServices(serviceDir string) ([]string, error) {
 	}
 
 	return services, nil
+}
+
+func StartupService(serviceFile string) {
+}
+
+func ServiceFileWatch() {
 }
