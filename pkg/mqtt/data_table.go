@@ -25,12 +25,12 @@ type TopicManager struct {
 
 type DataTable struct {
 	rwMutex    sync.RWMutex
-	topicTable map[string]TopicManager
+	topicTable map[string]*TopicManager
 }
 
 func NewDataTable() *DataTable {
 	return &DataTable{
-		topicTable: make(map[string]TopicManager),
+		topicTable: make(map[string]*TopicManager),
 	}
 }
 
@@ -40,10 +40,11 @@ func (table *DataTable) Add(topic string, state string) {
 
 	manager, isPresent := table.topicTable[topic]
 	if !isPresent {
-		manager = TopicManager{}
+		table.topicTable[topic] = &TopicManager{}
+		manager = table.topicTable[topic]
 	}
 
-	manager.state = state
+	table.topicTable[topic].state = state
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	if manager.cancelFunc != nil {
@@ -62,6 +63,22 @@ func (table *DataTable) Get(topic string) (string, bool) {
 	return value.state, isPresent
 }
 
+func (table *DataTable) getManagerRef(topic string) *TopicManager {
+	mgr, isPresent := table.topicTable[topic]
+	if !isPresent {
+		table.topicTable[topic] = &TopicManager{}
+		mgr = table.topicTable[topic]
+	}
+	return mgr
+}
+
+func NewTopicManager() *TopicManager {
+	return &TopicManager{
+		observers:  make([]chan<- StateTuple, 5),
+		cancelFunc: nil,
+	}
+}
+
 func (manager *TopicManager) Notify(ctx context.Context, event StateTuple) {
 	for _, obsChan := range manager.observers {
 		select {
@@ -74,6 +91,8 @@ func (manager *TopicManager) Notify(ctx context.Context, event StateTuple) {
 }
 
 func (manager *TopicManager) Attach(obs chan<- StateTuple) {
+	manager.obsMutex.Lock()
+	defer manager.obsMutex.Unlock()
 	manager.observers = append(manager.observers, obs)
 }
 
