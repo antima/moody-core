@@ -2,8 +2,6 @@ package mqtt
 
 import "sync"
 
-// TODO interface{} => interface{}  switch
-
 type Iterable interface {
 	Next() (interface{}, bool)
 }
@@ -62,7 +60,7 @@ func (concurrentSet *ConcurrentSet) ToSlice() []interface{} {
 	concurrentSet.mutex.RLock()
 	defer concurrentSet.mutex.RUnlock()
 	var services []interface{}
-	for _, elem := range concurrentSet.strings {
+	for elem := range concurrentSet.strings {
 		services = append(services, elem)
 	}
 	return services
