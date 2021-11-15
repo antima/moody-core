@@ -4,25 +4,27 @@ import (
 	"io/fs"
 	"path/filepath"
 	"plugin"
+	"time"
 )
 
 type InitFunc func() error
 type ActuateFunc func(tuple StateTuple) error
 
+var (
+	services *ConcurrentSet = NewConcurrentSet()
+)
+
 type MoodyService interface {
 	Name() string
 	ServiceName() string
 	Version() string
-	Init() error
-	Actuate(PublishFunc) error
 }
 
 type PluginService struct {
-	dataChan <-chan StateTuple
-
-	name        string
-	serviceName string
-	version     string
+	dataChan    chan StateTuple
+	Name        string `json:"name"`
+	ServiceName string `json:"serviceName"`
+	Version     string `json:"version"`
 	topics      []string
 	init        InitFunc
 	actuate     ActuateFunc
@@ -60,21 +62,13 @@ func NewPluginService(filename string) (*PluginService, error) {
 	}
 
 	return &PluginService{
-		name:        filename,
-		serviceName: *name.(*string),
-		version:     *version.(*string),
+		Name:        filename,
+		ServiceName: *name.(*string),
+		Version:     *version.(*string),
 		topics:      *topics.(*[]string),
 		init:        init.(InitFunc),
 		actuate:     actuate.(ActuateFunc),
 	}, nil
-}
-
-func (service *PluginService) Name() string {
-	return service.name
-}
-
-func (service *PluginService) Version() string {
-	return service.version
 }
 
 func (service *PluginService) ListenForUpdates() {
@@ -83,28 +77,68 @@ func (service *PluginService) ListenForUpdates() {
 	}
 }
 
-func GetAllServices(serviceDir string) ([]string, error) {
-	var services []string
-	err := filepath.WalkDir(serviceDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+func StartServiceManager(serviceDir string, dataTable *DataTable) {
+	serviceNames := getAllServices(serviceDir)
+	startupServices(serviceNames, dataTable)
 
+	for {
+		select {
+		case <-time.After(1 * time.Second):
+			currServiceNames := getAllServices(serviceDir)
+			toAdd := serviceNames.Difference(currServiceNames)
+			toDel := currServiceNames.Difference(serviceNames)
+
+			if toAdd.Size() > 0 {
+				startupServices(toAdd, dataTable)
+
+			}
+			if toAdd.Size() > 0 {
+				stopServices(toDel, dataTable)
+			}
+		}
+	}
+}
+
+func GetActiveServices() []*PluginService {
+	return nil
+}
+
+func startupServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
+	if serviceNames == nil || serviceNames.Size() == 0 {
+		return
+	}
+	servIter := serviceNames.Iterator()
+	for next, end := servIter.Next(); !end; next, end = servIter.Next() {
+		service, err := NewPluginService(next.(string))
+		if err == nil {
+			services.Add(service)
+			service.init()
+			for _, topic := range service.topics {
+				mgr := dataTable.getManagerRef(topic)
+				mgr.Attach(service.dataChan)
+			}
+			go service.ListenForUpdates()
+		}
+	}
+}
+
+func stopServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
+	if serviceNames == nil || serviceNames.Size() == 0 {
+		return
+	}
+	servIter := serviceNames.Iterator()
+	for next, end := servIter.Next(); !end; next, end = servIter.Next() {
+		services.Remove(next)
+	}
+}
+
+func getAllServices(serviceDir string) *ConcurrentSet {
+	serviceNames := NewConcurrentSet()
+	_ = filepath.WalkDir(serviceDir, func(path string, d fs.DirEntry, err error) error {
 		if !d.IsDir() && filepath.Ext(d.Name()) == ".so" {
-			services = append(services, d.Name())
+			serviceNames.Add(d.Name())
 		}
 		return nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return services, nil
-}
-
-func StartupService(serviceFile string) {
-}
-
-func ServiceFileWatch() {
+	return serviceNames
 }
