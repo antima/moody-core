@@ -1,4 +1,4 @@
-package model
+package http
 
 import (
 	"sync"
@@ -10,10 +10,6 @@ const (
 	EventAdded DeviceEvent = iota
 	EventRemoved
 )
-
-type Observer interface {
-	ListenForUpdates()
-}
 
 type DeviceMsg struct {
 	Device Device
