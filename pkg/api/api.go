@@ -5,15 +5,12 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/antima/moody-core/pkg/device"
-
-	"github.com/antima/moody-core"
-
+	httpIfc "github.com/antima/moody-core/pkg/http"
 	"github.com/gorilla/mux"
 )
 
 var (
-	devices *device.DeviceList
+	devices *httpIfc.DeviceList
 )
 
 type DevicesResp struct {
@@ -21,14 +18,17 @@ type DevicesResp struct {
 }
 
 type DeviceResp struct {
-	device.Node
+	httpIfc.Node
 	Type string `json:"type"`
 }
 
-func moodyApi(deviceList *device.DeviceList, port string) {
+func MoodyApi(deviceList *httpIfc.DeviceList, port string) {
 	if deviceList == nil {
 		panic("Device list can't be nil")
 	}
+
+	devices = deviceList
+
 	router := mux.NewRouter()
 	router.HandleFunc("/api/device", getDevices).Methods("GET")
 	router.HandleFunc("/api/device/{url}", getDevice).Methods("GET")
@@ -49,7 +49,7 @@ func getDevices(w http.ResponseWriter, _ *http.Request) {
 func getDevice(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := moody.Devices.Get(vars["url"])
+	dev, exists := devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -57,11 +57,11 @@ func getDevice(w http.ResponseWriter, r *http.Request) {
 
 	var devResp DeviceResp
 	switch dev.(type) {
-	case *device.Sensor:
-		devResp = DeviceResp{Node: dev.(*device.Sensor).Node}
+	case *httpIfc.Sensor:
+		devResp = DeviceResp{Node: dev.(*httpIfc.Sensor).Node}
 		devResp.Type = "sensor"
-	case *device.Actuator:
-		devResp = DeviceResp{Node: dev.(*device.Actuator).Node}
+	case *httpIfc.Actuator:
+		devResp = DeviceResp{Node: dev.(*httpIfc.Actuator).Node}
 		devResp.Type = "actuator"
 	default:
 		break
@@ -75,20 +75,20 @@ func getDevice(w http.ResponseWriter, r *http.Request) {
 func getSensorData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := moody.Devices.Get(vars["url"])
+	dev, exists := devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	sensor, isSensor := dev.(*device.Sensor)
+	sensor, isSensor := dev.(*httpIfc.Sensor)
 	if !isSensor {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	data := sensor.Read()
-	dataResp := device.DataPacket{Payload: data}
+	dataResp := httpIfc.DataPacket{Payload: data}
 	if err := json.NewEncoder(w).Encode(&dataResp); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -97,19 +97,19 @@ func getSensorData(w http.ResponseWriter, r *http.Request) {
 func getActuatorData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := moody.Devices.Get(vars["url"])
+	dev, exists := devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	actuator, isActuator := dev.(*device.Actuator)
+	actuator, isActuator := dev.(*httpIfc.Actuator)
 	if !isActuator {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	state := actuator.State()
-	dataResp := device.DataPacket{Payload: state}
+	dataResp := httpIfc.DataPacket{Payload: state}
 	if err := json.NewEncoder(w).Encode(&dataResp); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -118,13 +118,13 @@ func getActuatorData(w http.ResponseWriter, r *http.Request) {
 func putActuatorData(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	vars := mux.Vars(r)
-	dev, exists := moody.Devices.Get(vars["url"])
+	dev, exists := devices.Get(vars["url"])
 	if dev == nil || !exists {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	data := device.DataPacket{}
+	data := httpIfc.DataPacket{}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&data); err != nil {
@@ -132,7 +132,7 @@ func putActuatorData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actuator, isActuator := dev.(*device.Actuator)
+	actuator, isActuator := dev.(*httpIfc.Actuator)
 	if !isActuator {
 		w.WriteHeader(http.StatusNotFound)
 		return
