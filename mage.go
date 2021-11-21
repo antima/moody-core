@@ -20,35 +20,40 @@ const (
 	serviceSourceDirectory = "internal/services"
 )
 
-func All() error {
-	err := Test()
-	if err != nil {
-		return err
-	}
-	return Build()
-}
-
+// Build the application into a single binary for the target architecture
 func Build() error {
 	return command("go", "build", "-ldflags", "-s -w", "./cmd/moody-core").Run()
 }
 
+// Buildrpi builds the application into a single binary targeting a 32-bit Linux on Raspberry Pi
+func Buildrpi() error {
+	cmd := command("go", "build", "-ldflags", "-s -w", "./cmd/moody-core")
+	cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=arm", "GOARM=7")
+	return cmd.Run()
+}
+
+// Clean removes previously built binaries
 func Clean() error {
 	return os.Remove(binaryName)
 }
 
+// Install the application after building it, by placing it in GOPATH/bin
 func Install() error {
 	return command("go", "install", "-ldflags", "-s -w", "./cmd/moody-core").Run()
 }
 
+// Uninstall the application by removing the binary form GOPATH/bin
 func Uninstall() error {
 	path := fmt.Sprintf("%s/bin/%s", build.Default.GOPATH, binaryName)
 	return os.Remove(path)
 }
 
+// Test the application by running go test in each sub-directory
 func Test() error {
 	return command("go", "test", "./...").Run()
 }
 
+// Services build every service found within ./internal/services/
 func Services() error {
 	if err := os.Mkdir(serviceDirectory, 0755); err != nil && !errors.Is(err, os.ErrExist) {
 		return err
@@ -60,7 +65,7 @@ func Services() error {
 		}
 
 		if d.IsDir() && d.Name() != serviceDirectory {
-			cmd := command("go", "build", "-buildmode", "plugin")
+			cmd := command("go", "build", "-ldflags", "-s -w", "-buildmode", "plugin")
 			cmd.Dir = serviceSourceDirectory + "/" + d.Name()
 			err := cmd.Run()
 			if err != nil {
