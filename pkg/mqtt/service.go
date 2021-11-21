@@ -1,83 +1,27 @@
 package mqtt
 
 import (
+	"fmt"
 	"io/fs"
+	"log"
 	"path/filepath"
-	"plugin"
 	"time"
 )
 
-type InitFunc func() error
-type ActuateFunc func(tuple StateTuple) error
-
 var (
-	services *ConcurrentSet = NewConcurrentSet()
+	services *ServiceMap = NewServiceMap()
 )
 
 type MoodyService interface {
-	Name() string
-	ServiceName() string
-	Version() string
-}
-
-type PluginService struct {
-	dataChan    chan StateTuple
-	Name        string `json:"name"`
-	ServiceName string `json:"serviceName"`
-	Version     string `json:"version"`
-	topics      []string
-	init        InitFunc
-	actuate     ActuateFunc
-}
-
-func NewPluginService(filename string) (*PluginService, error) {
-	pluginService, err := plugin.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	name, err := pluginService.Lookup("Name")
-	if err != nil {
-		return nil, err
-	}
-
-	version, err := pluginService.Lookup("Version")
-	if err != nil {
-		return nil, err
-	}
-
-	topics, err := pluginService.Lookup("Topics")
-	if err != nil {
-		return nil, err
-	}
-
-	init, err := pluginService.Lookup("Init")
-	if err != nil {
-		return nil, err
-	}
-
-	actuate, err := pluginService.Lookup("Actuate")
-	if err != nil {
-		return nil, err
-	}
-
-	return &PluginService{
-		Name:        filename,
-		ServiceName: *name.(*string),
-		Version:     *version.(*string),
-		topics:      *topics.(*[]string),
-		init:        init.(InitFunc),
-		actuate:     actuate.(ActuateFunc),
-	}, nil
-}
-
-func (service *PluginService) ListenForUpdates() {
-	for data := range service.dataChan {
-		service.actuate(data)
-	}
+	Init() error
+	Topics() []string
+	Actuate(topic string, state string) error
+	ListenForUpdates()
+	Stop(dataTable *DataTable)
 }
 
 func StartServiceManager(serviceDir string, dataTable *DataTable) {
+	log.Printf("Starting the service manager module, serving services from %s\n", serviceDir)
 	serviceNames := getAllServices(serviceDir)
 	startupServices(serviceNames, dataTable)
 
@@ -100,6 +44,7 @@ func StartServiceManager(serviceDir string, dataTable *DataTable) {
 }
 
 func GetActiveServices() []*PluginService {
+	// TODO
 	return nil
 }
 
@@ -109,16 +54,29 @@ func startupServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
 	}
 	servIter := serviceNames.Iterator()
 	for next, end := servIter.Next(); !end; next, end = servIter.Next() {
-		service, err := NewPluginService(next.(string))
-		if err == nil {
-			services.Add(service)
-			service.init()
-			for _, topic := range service.topics {
-				mgr := dataTable.getManagerRef(topic)
-				mgr.Attach(service.dataChan)
-			}
-			go service.ListenForUpdates()
+		serviceName := next.(string)
+		service, err := NewPluginService(serviceName)
+		if err != nil {
+			log.Printf("error: could not initialize service '%s', %v", serviceName, err)
+			continue
 		}
+
+		log.Printf("found service %s\n", service.ServiceName)
+		services.Add(next.(string), service)
+
+		err = service.Init()
+		if err != nil {
+			log.Printf("error: could not initialize service '%s', %v", service.ServiceName, err)
+			return
+		}
+
+		for _, topic := range service.topics {
+			mgr := dataTable.getManagerRef(topic)
+			mgr.Attach(service.dataChan)
+		}
+		log.Printf("service %s starting\n", service.ServiceName)
+		go service.ListenForUpdates()
+
 	}
 }
 
@@ -128,15 +86,24 @@ func stopServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
 	}
 	servIter := serviceNames.Iterator()
 	for next, end := servIter.Next(); !end; next, end = servIter.Next() {
-		services.Remove(next)
+		serviceName := next.(string)
+		service, isContained := services.Get(serviceName)
+		if isContained {
+			service.Stop(dataTable)
+			services.Remove(serviceName)
+		}
 	}
 }
 
 func getAllServices(serviceDir string) *ConcurrentSet {
 	serviceNames := NewConcurrentSet()
 	_ = filepath.WalkDir(serviceDir, func(path string, d fs.DirEntry, err error) error {
-		if !d.IsDir() && filepath.Ext(d.Name()) == ".so" {
-			serviceNames.Add(d.Name())
+		if d != nil && !d.IsDir() && filepath.Ext(d.Name()) == ".so" {
+			currName := fmt.Sprintf("%s/%s", serviceDir, d.Name())
+			name, err := filepath.Abs(currName)
+			if err == nil {
+				serviceNames.Add(name)
+			}
 		}
 		return nil
 	})
