@@ -24,7 +24,7 @@ type DeviceResp struct {
 
 func MoodyApi(deviceList *httpIfc.DeviceList, port string) {
 	if deviceList == nil {
-		panic("Device list can't be nil")
+		panic("MoodyApi: device list can't be nil")
 	}
 
 	devices = deviceList
@@ -35,6 +35,8 @@ func MoodyApi(deviceList *httpIfc.DeviceList, port string) {
 	router.HandleFunc("/api/sensor/{url}", getSensorData).Methods("GET")
 	router.HandleFunc("/api/actuator/{url}", getActuatorData).Methods("GET")
 	router.HandleFunc("/api/actuator/{url}", putActuatorData).Methods("PUT")
+
+	log.Printf("starting the API server on port %s\n", port)
 	log.Fatal(http.ListenAndServe(port, router))
 }
 

@@ -46,6 +46,7 @@ func NewMonitor(list *DeviceList) *SsdpMonitor {
 
 func (m *SsdpMonitor) Start() {
 	err := m.monitor.Start()
+	log.Println("starting up the SSDP monitor")
 
 	if err != nil {
 		log.Fatal(err)
@@ -53,5 +54,6 @@ func (m *SsdpMonitor) Start() {
 }
 
 func (m *SsdpMonitor) Stop() {
+	log.Println("stopping the SSDP monitor")
 	_ = m.monitor.Close()
 }

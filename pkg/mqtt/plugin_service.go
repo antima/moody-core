@@ -6,8 +6,11 @@ import (
 )
 
 var (
-	ErrInvalidInitFunc = fmt.Errorf("the init function defined in the service is not valid")
-	ErrActuateInitFunc = fmt.Errorf("the actuate function defined in the service is not valid")
+	ErrInvalidNameVar    = fmt.Errorf("the Name variable defined in the service is not valid")
+	ErrInvalidVersionVar = fmt.Errorf("the Version variable defined in the service is not valid")
+	ErrInvalidTopicsVar  = fmt.Errorf("the Topics array defined in the service is not valid")
+	ErrInvalidInitFunc   = fmt.Errorf("the init function defined in the service is not valid")
+	ErrActuateInitFunc   = fmt.Errorf("the actuate function defined in the service is not valid")
 )
 
 type PluginService struct {
@@ -27,18 +30,33 @@ func NewPluginService(filename string) (*PluginService, error) {
 	}
 
 	name, err := pluginService.Lookup("Name")
+	nameVar, isNameVar := name.(*string)
 	if err != nil {
 		return nil, err
+	}
+
+	if !isNameVar {
+		return nil, ErrInvalidNameVar
 	}
 
 	version, err := pluginService.Lookup("Version")
+	versionVar, isVersionVar := version.(*string)
 	if err != nil {
 		return nil, err
 	}
 
+	if !isVersionVar {
+		return nil, ErrInvalidVersionVar
+	}
+
 	topics, err := pluginService.Lookup("Topics")
+	topicsVar, isTopicsVar := topics.(*[]string)
 	if err != nil {
 		return nil, err
+	}
+
+	if !isTopicsVar {
+		return nil, ErrInvalidTopicsVar
 	}
 
 	init, err := pluginService.Lookup("Init")
@@ -61,11 +79,16 @@ func NewPluginService(filename string) (*PluginService, error) {
 		return nil, ErrActuateInitFunc
 	}
 
+	for idx, topic := range *topicsVar {
+		(*topicsVar)[idx] = fmt.Sprintf("%s%s", baseTopic[:len(baseTopic)-1], topic)
+	}
+
 	return &PluginService{
+		dataChan:    make(chan StateTuple),
 		Name:        filename,
-		ServiceName: *name.(*string),
-		Version:     *version.(*string),
-		topics:      *topics.(*[]string),
+		ServiceName: *nameVar,
+		Version:     *versionVar,
+		topics:      *topicsVar,
 		init:        initFunc,
 		actuate:     actuateFunc,
 	}, nil

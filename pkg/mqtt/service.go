@@ -9,6 +9,8 @@ import (
 )
 
 var (
+	// may change this into a goroutine able to return copies
+	// from a channel for the public HTTP APIs
 	services *ServiceMap = NewServiceMap()
 )
 
@@ -25,22 +27,24 @@ func StartServiceManager(serviceDir string, dataTable *DataTable) {
 	serviceNames := getAllServices(serviceDir)
 	startupServices(serviceNames, dataTable)
 
-	for {
-		select {
-		case <-time.After(1 * time.Second):
-			currServiceNames := getAllServices(serviceDir)
-			toAdd := serviceNames.Difference(currServiceNames)
-			toDel := currServiceNames.Difference(serviceNames)
+	go func() {
+		for {
+			select {
+			case <-time.After(1 * time.Second):
+				currServiceNames := getAllServices(serviceDir)
+				toAdd := serviceNames.Difference(currServiceNames)
+				toDel := currServiceNames.Difference(serviceNames)
 
-			if toAdd.Size() > 0 {
-				startupServices(toAdd, dataTable)
+				if toAdd.Size() > 0 {
+					startupServices(toAdd, dataTable)
 
-			}
-			if toAdd.Size() > 0 {
-				stopServices(toDel, dataTable)
+				}
+				if toAdd.Size() > 0 {
+					stopServices(toDel, dataTable)
+				}
 			}
 		}
-	}
+	}()
 }
 
 func GetActiveServices() []*PluginService {
