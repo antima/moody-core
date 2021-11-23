@@ -25,7 +25,33 @@ const (
 
 	defaultBrokerString = "tcp://localhost:1883"
 	defaultServiceDir   = "./services"
-	defaultApiPort      = 6666
+	defaultApiPort      = 8080
+
+	antimaLogo = `
+               -/////////////////:                
+           .////-               .:///:            
+         ///.                        ://:         
+      ./O-            .///:             /O/       
+     /O.              OOOO0-              /O,     
+   .O:                ./O//                 O/    
+  ,0.                   /                    /O   
+ .0.                    /                     /O  
+ 0,                ,:   /      /O:             O: 
+:O                   ,  /    .-.               .# 
+O:                .   ,./-.--                   0-
+#                  ..-::O/:....:                O/
+#             :,......:/O//-                    O/
+O:            -.    -//.,,.//                   0-
+:O                ,/:, ..,  .//                .# 
+ 0,             ,/:/:    :/    //.,.           O: 
+ .0.      ./00OO: .:-    .:     :0OO:         /O  
+  ,0.     /#####:               .///.        /O   
+   .O:    .O##0/                            O/    
+     /O.                                  /O,     
+      ./O,                              /O/       
+         ///.                        ://:         
+           .////,               .:///:            
+               ./////////////////:                `
 )
 
 type Config struct {
@@ -49,19 +75,23 @@ func fromConfigFile(configFilePath string) (*Config, error) {
 }
 
 func startCore(brokerString string, serviceDir string, apiPort int) {
+	fmt.Println(antimaLogo + "\n")
+	fmt.Println("\tmoody-core - Powered by Antima.it (c) 2021")
+
 	deviceTable := http.NewDeviceList()
 	dataTable := mqtt.NewDataTable()
 	mqtt.StartServiceManager(serviceDir, dataTable)
 	mqtt.StartMqttManager(brokerString, dataTable)
 	http.NewMonitor(deviceTable).Start()
 	api.MoodyApi(deviceTable, fmt.Sprintf(":%d", apiPort))
+	fmt.Println("moody-core - stopping")
 }
 
 func main() {
 	parser := argparse.NewParser(name, desc)
 
 	printVersion := parser.Flag("v", "version", &argparse.Options{
-		Help: version,
+		Help: versionHelp,
 	})
 
 	brokerString := parser.String("b", "broker", &argparse.Options{
