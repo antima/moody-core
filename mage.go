@@ -39,7 +39,27 @@ func Clean() error {
 
 // Install the application after building it, by placing it in GOPATH/bin
 func Install() error {
-	return command("go", "install", "-ldflags", "-s -w", "./cmd/moody-core").Run()
+	if err := os.MkdirAll("/etc/moody", 0755); err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll("/usr/local/lib/moody", 0755); err != nil {
+		return err
+	}
+
+	if err := copyFile("./config/conf.json", "/etc/moody/conf.json"); err != nil {
+		return err
+	}
+
+	if err := copyFile("./config/systemd/moody.service", "/etc/systemd/system/moody.service"); err != nil {
+		return err
+	}
+
+	if err := moveFile(binaryName, "/usr/local/bin/"+binaryName); err != nil {
+		return err
+	}
+
+	return command("systemctl enable moody").Run()
 }
 
 // Uninstall the application by removing the binary form GOPATH/bin
@@ -89,7 +109,7 @@ func command(command string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-func moveFile(inName string, outName string) error {
+func copyFile(inName string, outName string) error {
 	dest, err := os.Create(outName)
 	if err != nil {
 		return err
@@ -106,9 +126,15 @@ func moveFile(inName string, outName string) error {
 		return err
 	}
 	src.Close()
+	return nil
+}
 
-	err = os.Remove(inName)
-	if err != nil {
+func moveFile(inName string, outName string) error {
+	if err := copyFile(inName, outName); err != nil {
+		return err
+	}
+
+	if err := os.Remove(inName); err != nil {
 		return err
 	}
 	return nil
