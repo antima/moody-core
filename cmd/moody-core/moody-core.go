@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/akamensky/argparse"
 	"github.com/antima/moody-core/pkg/api"
@@ -14,18 +17,18 @@ import (
 
 const (
 	name    = "moody-core"
-	desc    = "TODO"
+	desc    = "the moody core engine"
 	version = "0.1.0"
-
-	versionHelp    = ""
-	brokerHelp     = ""
-	apiPortHelp    = ""
-	serviceDirHelp = ""
-	configHelp     = ""
 
 	defaultBrokerString = "tcp://localhost:1883"
 	defaultServiceDir   = "./services"
-	defaultApiPort      = 8080
+	defaultApiPort      = ":8080"
+
+	versionHelp    = "Print out the current version"
+	brokerHelp     = "Pass the broker connection string in the <scheme>://<host>:<port> format"
+	apiPortHelp    = "Start the HTTP API server on the specified port, in the :<port> format"
+	serviceDirHelp = "Pass the directory from where to load the services"
+	configHelp     = "Pass the location of a file specifying the needed configurations in json format"
 
 	antimaLogo = `
                -/////////////////:                
@@ -56,7 +59,7 @@ O:            -.    -//.,,.//                   0-
 
 type Config struct {
 	BrokerString string `json:"brokerString"`
-	ApiPort      int    `json:"apiPort"`
+	ApiPort      string `json:"apiPort"`
 	ServiceDir   string `json:"serviceDir"`
 }
 
@@ -66,25 +69,36 @@ func fromConfigFile(configFilePath string) (*Config, error) {
 		return nil, err
 	}
 
-	var config *Config
-	if err := json.Unmarshal(fileBytes, config); err != nil {
+	var config Config
+	if err := json.Unmarshal(fileBytes, &config); err != nil {
 		return nil, err
 	}
 
-	return config, nil
+	return &config, nil
 }
 
-func startCore(brokerString string, serviceDir string, apiPort int) {
+func startCore(brokerString string, serviceDir string, apiPort string) {
+	quit := make(chan os.Signal)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	fmt.Println(antimaLogo + "\n")
-	fmt.Println("\tmoody-core - Powered by Antima.it (c) 2021")
+	fmt.Printf("\tmoody-core v%s - Powered by Antima.it\n", version)
 
 	deviceTable := http.NewDeviceList()
 	dataTable := mqtt.NewDataTable()
+	apiServer := api.StartMoodyApi(deviceTable, apiPort)
 	mqtt.StartServiceManager(serviceDir, dataTable)
 	mqtt.StartMqttManager(brokerString, dataTable)
 	http.NewMonitor(deviceTable).Start()
-	api.MoodyApi(deviceTable, fmt.Sprintf(":%d", apiPort))
+	<-quit
+	if err := apiServer.Shutdown(context.TODO()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func stopCore() {
 	fmt.Println("moody-core - stopping")
+	mqtt.StopMqttManager()
+	fmt.Println("Bye!")
 }
 
 func main() {
@@ -99,7 +113,7 @@ func main() {
 		Default: defaultBrokerString,
 	})
 
-	apiPort := parser.Int("p", "port", &argparse.Options{
+	apiPort := parser.String("p", "port", &argparse.Options{
 		Help:    apiPortHelp,
 		Default: defaultApiPort,
 	})
@@ -120,12 +134,13 @@ func main() {
 
 	if *printVersion {
 		fmt.Println(fmt.Sprintf("%s - version v%s", name, version))
+		return
 	}
 
 	if *configFile != "" {
 		config, err := fromConfigFile(*configFile)
 		if err != nil {
-			log.Fatal(parser.Usage(err))
+			log.Fatal(err)
 		}
 		*brokerString = config.BrokerString
 		*serviceDir = config.ServiceDir
@@ -133,4 +148,5 @@ func main() {
 	}
 
 	startCore(*brokerString, *serviceDir, *apiPort)
+	stopCore()
 }

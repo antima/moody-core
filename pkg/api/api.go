@@ -22,7 +22,7 @@ type DeviceResp struct {
 	Type string `json:"type"`
 }
 
-func MoodyApi(deviceList *httpIfc.DeviceList, port string) {
+func StartMoodyApi(deviceList *httpIfc.DeviceList, port string) *http.Server {
 	if deviceList == nil {
 		panic("MoodyApi: device list can't be nil")
 	}
@@ -37,7 +37,7 @@ func MoodyApi(deviceList *httpIfc.DeviceList, port string) {
 	router.HandleFunc("/api/actuator/{url}", putActuatorData).Methods("PUT")
 
 	log.Printf("starting the API server on port %s\n", port)
-	log.Fatal(http.ListenAndServe(port, router))
+	return &http.Server{Addr: port, Handler: router}
 }
 
 func getDevices(w http.ResponseWriter, _ *http.Request) {

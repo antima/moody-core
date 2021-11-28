@@ -27,7 +27,7 @@ func StartMqttManager(brokerString string, dataTableRef *DataTable) error {
 	clientOpts.SetClientID(fmt.Sprintf("Moody-Recv"))
 	clientOpts.SetAutoReconnect(true)
 	clientOpts.SetOnConnectHandler(subscribe)
-
+	clientOpts.SetConnectionLostHandler(lostConnectionHandler)
 	client = mqtt.NewClient(&clientOpts)
 	if err := connect(); err != nil {
 		log.Fatal(err)
@@ -37,10 +37,19 @@ func StartMqttManager(brokerString string, dataTableRef *DataTable) error {
 	return nil
 }
 
+func StopMqttManager() {
+	log.Println("stopping the mqtt service")
+	client.Unsubscribe(baseTopic)
+	client.Disconnect(100)
+}
+
 func Publish(payload string, topic string) {
+	// TODO
+	// if the actuate function from a service returns with a
+	// send flag, this should be called with a specific topic
+	// and payload obtained from the actuate return value
 	token := client.Publish(topic, 0, true, payload)
 	if token.Wait() && token.Error() != nil {
-		// TODO
 	}
 }
 
@@ -48,19 +57,19 @@ func connect() error {
 	var token mqtt.Token
 	opts := client.OptionsReader()
 	for retries := 0; retries < connectionRetries; retries += 1 {
-		log.Printf("attempting mqtt connection #%d to server %s\n", retries+1, opts.Servers()[0])
+		log.Printf("attempting a connection #%d to the mqtt broker @%s\n", retries+1, opts.Servers()[0])
 		token = client.Connect()
 		if token.Wait() && token.Error() != nil {
-			retries += 1
 			continue
 		}
-		log.Printf("succesfully connected to the mqtt broker @%s!", opts.Servers()[0])
 		return nil
 	}
 	return token.Error()
 }
 
 func subscribe(client mqtt.Client) {
+	opts := client.OptionsReader()
+	log.Printf("succesfully connected to the mqtt broker @%s!", opts.Servers()[0])
 	token := client.Subscribe(baseTopic, 0, dataCallback)
 	for token.Wait() && token.Error() != nil {
 	}
@@ -74,4 +83,9 @@ func dataCallback(c mqtt.Client, m mqtt.Message) {
 		log.Printf("received MQTT message from topic %s, with payload: %s\n", topic, payload)
 		dataTable.Add(topic, payload)
 	}
+}
+
+func lostConnectionHandler(c mqtt.Client, e error) {
+	opts := client.OptionsReader()
+	log.Printf("lost connection with the broker @%s, trying to reconnect", opts.Servers()[0])
 }
