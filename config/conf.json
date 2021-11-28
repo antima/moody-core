@@ -1,0 +1,5 @@
+{
+    "brokerString": "tcp://127.0.0.1:1883",
+    "apiPort": ":8080",
+    "serviceDir": "/usr/local/lib/moody"
+}
