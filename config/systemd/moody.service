@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/moody-core -c /etc/moody/conf.json
+ExecStart=/usr/local/bin/moody-core -c /etc/moody/conf.json
 ExecStop=/bin/kill -s TERM $MAINPID
 ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure

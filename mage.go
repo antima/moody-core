@@ -5,8 +5,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"go/build"
 	"io"
 	"io/fs"
 	"os"
@@ -55,17 +53,35 @@ func Install() error {
 		return err
 	}
 
-	if err := moveFile(binaryName, "/usr/local/bin/"+binaryName); err != nil {
+	if err := copyFile(binaryName, "/usr/local/bin/"+binaryName); err != nil {
 		return err
 	}
 
-	return command("systemctl enable moody").Run()
+	if err := command("systemctl", "enable", "moody").Run(); err != nil {
+		return err
+	}
+
+	return command("systemctl", "start", "moody").Run()
 }
 
-// Uninstall the application by removing the binary form GOPATH/bin
 func Uninstall() error {
-	path := fmt.Sprintf("%s/bin/%s", build.Default.GOPATH, binaryName)
-	return os.Remove(path)
+	if err := command("systemctl", "disable", "moody").Run(); err != nil {
+		return err
+	}
+
+	if err := os.RemoveAll("/etc/moody"); err != nil {
+		return err
+	}
+
+	if err := os.RemoveAll("/usr/local/lib/moody"); err != nil {
+		return err
+	}
+
+	if err := os.Remove("/etc/systemd/system/moody.service"); err != nil {
+		return err
+	}
+
+	return os.Remove("/usr/local/bin/moody-core")
 }
 
 // Test the application by running go test in each sub-directory
@@ -110,7 +126,7 @@ func command(command string, args ...string) *exec.Cmd {
 }
 
 func copyFile(inName string, outName string) error {
-	dest, err := os.Create(outName)
+	dest, err := os.OpenFile(outName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
 	}
