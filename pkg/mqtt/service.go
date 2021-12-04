@@ -11,7 +11,7 @@ import (
 var (
 	// may change this into a goroutine able to return copies
 	// from a channel for the public HTTP APIs
-	services *ServiceMap = NewServiceMap()
+	services = NewServiceMap()
 )
 
 type MoodyService interface {
@@ -24,32 +24,40 @@ type MoodyService interface {
 
 func StartServiceManager(serviceDir string, dataTable *DataTable) {
 	log.Printf("Starting the service manager module, serving services from %s\n", serviceDir)
-	serviceNames := getAllServices(serviceDir)
-	startupServices(serviceNames, dataTable)
-
 	go func() {
+		serviceNames := getAllServices(serviceDir)
+		if serviceNames.Size() > 0 {
+			startupServices(serviceNames, dataTable)
+		}
+
 		for {
 			select {
 			case <-time.After(1 * time.Second):
 				currServiceNames := getAllServices(serviceDir)
-				toAdd := serviceNames.Difference(currServiceNames)
-				toDel := currServiceNames.Difference(serviceNames)
+				toAdd := currServiceNames.Difference(serviceNames)
+				toDel := serviceNames.Difference(currServiceNames)
 
 				if toAdd.Size() > 0 {
 					startupServices(toAdd, dataTable)
-
+					iter := toAdd.Iterator()
+					for next, end := iter.Next(); !end; next, end = iter.Next() {
+						serviceNames.Add(next)
+					}
 				}
-				if toAdd.Size() > 0 {
+				if toDel.Size() > 0 {
 					stopServices(toDel, dataTable)
+					iter := toAdd.Iterator()
+					for next, end := iter.Next(); !end; next, end = iter.Next() {
+						serviceNames.Remove(next)
+					}
 				}
 			}
 		}
 	}()
 }
 
-func GetActiveServices() []*PluginService {
-	// TODO
-	return nil
+func GetActiveServices() []MoodyService {
+	return services.List()
 }
 
 func startupServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
@@ -93,6 +101,7 @@ func stopServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
 		serviceName := next.(string)
 		service, isContained := services.Get(serviceName)
 		if isContained {
+			log.Printf("service %s stopping\n", serviceName)
 			service.Stop(dataTable)
 			services.Remove(serviceName)
 		}
