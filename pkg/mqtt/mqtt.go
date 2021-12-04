@@ -21,7 +21,7 @@ var (
 
 type PublishFunc func(string, string)
 
-func StartMqttManager(brokerString string, dataTableRef *DataTable) error {
+func StartMqttManager(brokerString string, dataTableRef *DataTable) {
 	clientOpts := mqtt.ClientOptions{}
 	clientOpts.AddBroker(brokerString)
 	clientOpts.SetClientID(fmt.Sprintf("Moody-Recv"))
@@ -34,7 +34,6 @@ func StartMqttManager(brokerString string, dataTableRef *DataTable) error {
 	}
 
 	dataTable = dataTableRef
-	return nil
 }
 
 func StopMqttManager() {

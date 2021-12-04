@@ -33,3 +33,13 @@ func (concurrentMap *ServiceMap) Remove(name string) (MoodyService, bool) {
 	delete(concurrentMap.mappings, name)
 	return elem, isPresent
 }
+
+func (concurrentMap *ServiceMap) List() []MoodyService {
+	concurrentMap.mutex.RLock()
+	defer concurrentMap.mutex.RUnlock()
+	serviceList := make([]MoodyService, len(concurrentMap.mappings))
+	for _, service := range concurrentMap.mappings {
+		serviceList = append(serviceList, service)
+	}
+	return serviceList
+}
