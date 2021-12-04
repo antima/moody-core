@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -80,24 +79,21 @@ func fromConfigFile(configFilePath string) (*Config, error) {
 func startCore(brokerString string, serviceDir string, apiPort string) {
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	fmt.Println(antimaLogo + "\n")
+	fmt.Printf("%s\n\n", antimaLogo)
 	fmt.Printf("\tmoody-core v%s - Powered by Antima.it\n", version)
 
 	deviceTable := http.NewDeviceList()
 	dataTable := mqtt.NewDataTable()
 	apiServer := api.StartMoodyApi(deviceTable, apiPort)
+	monitor := http.NewMonitor(deviceTable)
 	mqtt.StartServiceManager(serviceDir, dataTable)
 	mqtt.StartMqttManager(brokerString, dataTable)
-	http.NewMonitor(deviceTable).Start()
+	monitor.Start()
 	<-quit
-	if err := apiServer.Shutdown(context.TODO()); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func stopCore() {
 	fmt.Println("moody-core - stopping")
 	mqtt.StopMqttManager()
+	monitor.Stop()
+	api.StopMoodyApi(apiServer)
 	fmt.Println("Bye!")
 }
 
@@ -148,5 +144,4 @@ func main() {
 	}
 
 	startCore(*brokerString, *serviceDir, *apiPort)
-	stopCore()
 }
