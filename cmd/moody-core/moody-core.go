@@ -84,9 +84,11 @@ func startCore(brokerString string, serviceDir string, apiPort string) {
 
 	deviceTable := http.NewDeviceList()
 	dataTable := mqtt.NewDataTable()
-	apiServer := api.StartMoodyApi(deviceTable, apiPort)
+	serviceMap := mqtt.NewServiceMap()
+
+	apiServer := api.StartMoodyApi(deviceTable, serviceMap, apiPort)
 	monitor := http.NewMonitor(deviceTable)
-	mqtt.StartServiceManager(serviceDir, dataTable)
+	mqtt.StartServiceManager(serviceDir, serviceMap, dataTable)
 	mqtt.StartMqttManager(brokerString, dataTable)
 	monitor.Start()
 	<-quit

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	httpIfc "github.com/antima/moody-core/pkg/http"
+	"github.com/antima/moody-core/pkg/mqtt"
 	"github.com/gorilla/mux"
 )
 
@@ -18,7 +19,7 @@ type DeviceResp struct {
 	Type string `json:"type"`
 }
 
-func StartMoodyApi(deviceList *httpIfc.DeviceList, port string) *http.Server {
+func StartMoodyApi(deviceList *httpIfc.DeviceList, serviceMap *mqtt.ServiceMap, port string) *http.Server {
 	if deviceList == nil {
 		panic("MoodyApi: device list can't be nil")
 	}
@@ -29,7 +30,7 @@ func StartMoodyApi(deviceList *httpIfc.DeviceList, port string) *http.Server {
 	router.HandleFunc("/api/sensor/{url}", getSensorData(deviceList)).Methods("GET")
 	router.HandleFunc("/api/actuator/{url}", getActuatorData(deviceList)).Methods("GET")
 	router.HandleFunc("/api/actuator/{url}", putActuatorData(deviceList)).Methods("PUT")
-	router.HandleFunc("/api/service", getServices).Methods("GET")
+	router.HandleFunc("/api/service", getServices(serviceMap)).Methods("GET")
 
 	log.Printf("starting the API server on port %s\n", port)
 	server := &http.Server{Addr: port, Handler: router}

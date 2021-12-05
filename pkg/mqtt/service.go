@@ -8,12 +8,6 @@ import (
 	"time"
 )
 
-var (
-	// may change this into a goroutine able to return copies
-	// from a channel for the public HTTP APIs
-	services = NewServiceMap()
-)
-
 type MoodyService interface {
 	Init() error
 	Topics() []string
@@ -22,12 +16,12 @@ type MoodyService interface {
 	Stop(dataTable *DataTable)
 }
 
-func StartServiceManager(serviceDir string, dataTable *DataTable) {
+func StartServiceManager(serviceDir string, services *ServiceMap, dataTable *DataTable) {
 	log.Printf("Starting the service manager module, serving services from %s\n", serviceDir)
 	go func() {
 		serviceNames := getAllServices(serviceDir)
 		if serviceNames.Size() > 0 {
-			startupServices(serviceNames, dataTable)
+			startupServices(serviceNames, services, dataTable)
 		}
 
 		for {
@@ -38,14 +32,14 @@ func StartServiceManager(serviceDir string, dataTable *DataTable) {
 				toDel := serviceNames.Difference(currServiceNames)
 
 				if toAdd.Size() > 0 {
-					startupServices(toAdd, dataTable)
+					startupServices(toAdd, services, dataTable)
 					iter := toAdd.Iterator()
 					for next, end := iter.Next(); !end; next, end = iter.Next() {
 						serviceNames.Add(next)
 					}
 				}
 				if toDel.Size() > 0 {
-					stopServices(toDel, dataTable)
+					stopServices(toDel, services, dataTable)
 					iter := toAdd.Iterator()
 					for next, end := iter.Next(); !end; next, end = iter.Next() {
 						serviceNames.Remove(next)
@@ -56,11 +50,7 @@ func StartServiceManager(serviceDir string, dataTable *DataTable) {
 	}()
 }
 
-func GetActiveServices() []MoodyService {
-	return services.List()
-}
-
-func startupServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
+func startupServices(serviceNames *ConcurrentSet, services *ServiceMap, dataTable *DataTable) {
 	if serviceNames == nil || serviceNames.Size() == 0 {
 		return
 	}
@@ -92,7 +82,7 @@ func startupServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
 	}
 }
 
-func stopServices(serviceNames *ConcurrentSet, dataTable *DataTable) {
+func stopServices(serviceNames *ConcurrentSet, services *ServiceMap, dataTable *DataTable) {
 	if serviceNames == nil || serviceNames.Size() == 0 {
 		return
 	}
