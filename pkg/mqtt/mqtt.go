@@ -12,47 +12,48 @@ const (
 	baseTopic         = "moody/device/#"
 )
 
-var (
-	client mqtt.Client
-
-	// this may be changed in some way not to be global state
+type MqttManager struct {
+	client    mqtt.Client
 	dataTable *DataTable
-)
+}
 
-type PublishFunc func(string, string)
+func StartMqttManager(brokerString string, dataTableRef *DataTable) *MqttManager {
+	mgr := &MqttManager{}
 
-func StartMqttManager(brokerString string, dataTableRef *DataTable) {
 	clientOpts := mqtt.ClientOptions{}
 	clientOpts.AddBroker(brokerString)
 	clientOpts.SetClientID(fmt.Sprintf("Moody-Recv"))
 	clientOpts.SetAutoReconnect(true)
-	clientOpts.SetOnConnectHandler(subscribe)
-	clientOpts.SetConnectionLostHandler(lostConnectionHandler)
-	client = mqtt.NewClient(&clientOpts)
-	if err := connect(); err != nil {
+	clientOpts.SetOnConnectHandler(mgr.subscribe)
+	clientOpts.SetConnectionLostHandler(mgr.lostConnectionHandler)
+	client := mqtt.NewClient(&clientOpts)
+
+	mgr.client = client
+	mgr.dataTable = dataTableRef
+	if err := mgr.connect(client); err != nil {
 		log.Fatal(err)
 	}
 
-	dataTable = dataTableRef
+	return mgr
 }
 
-func StopMqttManager() {
+func (mgr *MqttManager) StopMqttManager() {
 	log.Println("stopping the mqtt service")
-	client.Unsubscribe(baseTopic)
-	client.Disconnect(100)
+	mgr.client.Unsubscribe(baseTopic)
+	mgr.client.Disconnect(100)
 }
 
-func Publish(payload string, topic string) {
+func (mgr *MqttManager) Publish(payload string, topic string) {
 	// TODO
 	// if the actuate function from a service returns with a
 	// send flag, this should be called with a specific topic
 	// and payload obtained from the actuate return value
-	token := client.Publish(topic, 0, true, payload)
+	token := mgr.client.Publish(topic, 0, true, payload)
 	if token.Wait() && token.Error() != nil {
 	}
 }
 
-func connect() error {
+func (mgr *MqttManager) connect(client mqtt.Client) error {
 	var token mqtt.Token
 	opts := client.OptionsReader()
 	for retries := 0; retries < connectionRetries; retries += 1 {
@@ -66,25 +67,25 @@ func connect() error {
 	return token.Error()
 }
 
-func subscribe(client mqtt.Client) {
-	opts := client.OptionsReader()
+func (mgr *MqttManager) subscribe(c mqtt.Client) {
+	opts := c.OptionsReader()
 	log.Printf("succesfully connected to the mqtt broker @%s!", opts.Servers()[0])
-	token := client.Subscribe(baseTopic, 0, dataCallback)
+	token := c.Subscribe(baseTopic, 0, mgr.dataCallback)
 	for token.Wait() && token.Error() != nil {
 	}
 	log.Printf("succesfully subscribed to the %s topic\n", baseTopic)
 }
 
-func dataCallback(c mqtt.Client, m mqtt.Message) {
-	if dataTable != nil {
+func (mgr *MqttManager) dataCallback(c mqtt.Client, m mqtt.Message) {
+	if mgr.dataTable != nil {
 		topic := m.Topic()
 		payload := string(m.Payload())
 		log.Printf("received MQTT message from topic %s, with payload: %s\n", topic, payload)
-		dataTable.Add(topic, payload)
+		mgr.dataTable.Add(topic, payload)
 	}
 }
 
-func lostConnectionHandler(c mqtt.Client, e error) {
-	opts := client.OptionsReader()
+func (mgr *MqttManager) lostConnectionHandler(c mqtt.Client, e error) {
+	opts := c.OptionsReader()
 	log.Printf("lost connection with the broker @%s, trying to reconnect", opts.Servers()[0])
 }

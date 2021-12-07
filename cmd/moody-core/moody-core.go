@@ -88,13 +88,14 @@ func startCore(brokerString string, serviceDir string, apiPort string) {
 
 	apiServer := api.StartMoodyApi(deviceTable, serviceMap, apiPort)
 	monitor := http.NewMonitor(deviceTable)
+	mqttManager := mqtt.StartMqttManager(brokerString, dataTable)
 	mqtt.StartServiceManager(serviceDir, serviceMap, dataTable)
-	mqtt.StartMqttManager(brokerString, dataTable)
 	monitor.Start()
+
 	<-quit
 	fmt.Println("moody-core - stopping")
-	mqtt.StopMqttManager()
 	monitor.Stop()
+	mqttManager.StopMqttManager()
 	api.StopMoodyApi(apiServer)
 	fmt.Println("Bye!")
 }
