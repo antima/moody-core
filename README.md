@@ -8,6 +8,13 @@ running firmware based on Moody-frameworks, like [MoodyNodeEsp](https://github.c
 - [moody-core](#moody-core)
 - [Build from source](#build-from-source)
 
+
+# Installation
+
+```bash
+go install github.com/antima/moody-core@latest
+```
+
 # Build from source
 
 The following command will build the application into the root directory of the repo.
@@ -21,4 +28,3 @@ To install moody globally and run it as a systemd service, after buiding, run:
 ```bash
 sudo mage install
 ```
-
