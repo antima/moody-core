@@ -22,7 +22,7 @@ func (concurrentMap *ServiceMap) Add(name string, service MoodyService) {
 	concurrentMap.mappings[name] = service
 }
 
-// Get an service from the map in a synchronous fashion, returns (nil, false)
+// Get a service from the map in a synchronous fashion, returns (nil, false)
 // if the name-key is not present
 func (concurrentMap *ServiceMap) Get(name string) (MoodyService, bool) {
 	concurrentMap.mutex.RLock()
