@@ -16,6 +16,8 @@ var (
 	ErrActuateInitFunc   = fmt.Errorf("the actuate function defined in the service is not valid")
 )
 
+// PluginService represent a kind of plugin that is implementd
+// as a go plugin module
 type PluginService struct {
 	dataChan    chan StateTuple
 	Name        string `json:"name"`
@@ -26,6 +28,9 @@ type PluginService struct {
 	actuate     func(topic string, state string) error
 }
 
+// NewPluginService creates a new service from the passed plugin
+// file, returning an error if there is no such file or if it does
+// not conform to the moody service interface
 func NewPluginService(filename string) (*PluginService, error) {
 	pluginService, err := plugin.Open(filename)
 	if err != nil {
@@ -97,18 +102,24 @@ func NewPluginService(filename string) (*PluginService, error) {
 	}, nil
 }
 
+// Init initializes the service by calling the underlying
+// init function
 func (service *PluginService) Init() error {
 	return service.init()
 }
 
+// Topics returns a list of the topics that the service is
+// subscribed to
 func (service *PluginService) Topics() []string {
 	return service.topics
 }
 
+// Actuate a (topic, state) tuple
 func (service *PluginService) Actuate(topic string, state string) error {
 	return service.actuate(topic, state)
 }
 
+// ListenForUpdates starts the event loop for the service
 func (service *PluginService) ListenForUpdates() {
 	for data := range service.dataChan {
 		service.actuate(data.topic, data.state)
