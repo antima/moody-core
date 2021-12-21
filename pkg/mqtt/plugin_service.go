@@ -16,7 +16,7 @@ var (
 	ErrActuateInitFunc   = fmt.Errorf("the actuate function defined in the service is not valid")
 )
 
-// PluginService represent a kind of plugin that is implementd
+// PluginService represent a kind of plugin that is implemented
 // as a go plugin module
 type PluginService struct {
 	dataChan    chan StateTuple
@@ -126,6 +126,7 @@ func (service *PluginService) ListenForUpdates() {
 	}
 }
 
+// Stop terminates the service
 func (service *PluginService) Stop(dataTable *DataTable) {
 	for _, topic := range service.Topics() {
 		topicManager := dataTable.getManagerRef(topic)
